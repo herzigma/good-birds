@@ -1,7 +1,10 @@
 import datetime
+import logging
 from typing import List
 
 from .models import PhotoInfo, Burst, ScoredPhoto
+
+logger = logging.getLogger(__name__)
 
 def group_into_bursts(photos: List[PhotoInfo], threshold_seconds: float = 1.0) -> List[Burst]:
     """
@@ -10,8 +13,10 @@ def group_into_bursts(photos: List[PhotoInfo], threshold_seconds: float = 1.0) -
     exceeds the threshold.
     """
     if not photos:
+        logger.warning("No photos provided to group_into_bursts.")
         return []
 
+    logger.info(f"Grouping {len(photos)} photos with threshold {threshold_seconds}s")
     # Ensure the list is sorted just in case
     sorted_photos = sorted(photos, key=lambda p: p.full_timestamp_sort_key)
     
@@ -49,4 +54,6 @@ def group_into_bursts(photos: List[PhotoInfo], threshold_seconds: float = 1.0) -
     if current_burst_photos:
         bursts.append(Burst(photos=current_burst_photos))
         
+    logger.info(f"Created {len(bursts)} bursts.")
+    
     return bursts

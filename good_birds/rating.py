@@ -31,6 +31,11 @@ def get_exiftool_cmd() -> list[str] | None:
         if os.path.exists(perl_exe) and os.path.exists(exiftool_pl):
             return [perl_exe, exiftool_pl]
             
+    # Check if running from source with a downloaded binary
+    local_exiftool = Path(__file__).parent / "exiftool.exe"
+    if local_exiftool.exists():
+        return [str(local_exiftool)]
+            
     # Fallback to system path
     exe_path = shutil.which("exiftool")
     if exe_path:

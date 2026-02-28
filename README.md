@@ -1,4 +1,4 @@
-# Good Birds 🦅 📸
+![alt text](image.png)# Good Birds 🦅 📸
 
 A blazing fast command-line tool to help bird photographers sort through bursts of RAW photos and automatically pick the sharpest, best-exposed shots.
 
@@ -10,6 +10,7 @@ A blazing fast command-line tool to help bird photographers sort through bursts 
 - **Exposure Detection**: Analyzes histograms to severely penalize clipped highlights (blown whites) and crushed shadows.
 - **Automatic Rating**: Writes standard XMP star ratings direct to your CR2 files so they show up beautifully in Lightroom, Adobe Bridge, and other EXIF-aware software.
 - **Standalone Binary**: Zero dependencies required if you download the Windows executable! ExifTool is bundled automatically inside the app.
+- **Native Image Support**: Optionally process JPEGs, HEIFs, and WebP files alongside your RAW bursts natively, seamlessly avoiding duplicates.
 
 ## Standalone Executable (Windows)
 
@@ -57,6 +58,9 @@ good-birds /path/to/your/photos --dry-run --verbose
 
 # Tweak the burst timeframe to 0.5s instead of 1.0s
 good-birds /path/to/your/photos --burst-threshold 0.5
+
+# Exclude non-RAW formats like standalone JPEGs or HEIF files
+good-birds /path/to/your/photos --exclude-non-raw
 ```
 
 ### Options
@@ -71,6 +75,8 @@ good-birds /path/to/your/photos --burst-threshold 0.5
 | `--rating-rest` | `1` | The XMP star rating to write to all other photos in the burst. |
 | `--dry-run` | `False` | Analyzes and scores photos but skips writing ratings via exiftool. |
 | `--verbose` | `False` | Print detailed scoring data for the best photo of every burst in the final table. |
+| `--log` | `False` | Write detailed debug traces and errors into a local `good_birds.log` file in the scanned directory. |
+| `--exclude-non-raw` | `False` | Only process explicit RAW files. Skip attempting to score JPEGs, HEIFs, or WebP files natively. |
 
 ## How it works
 
@@ -80,6 +86,7 @@ good-birds /path/to/your/photos --burst-threshold 0.5
 4. **Scoring**:
    - **Sharpness**: Converts the image to grayscale and applies a Laplacian operator to find edges, calculating variance. More variance = more micro-contrast edges = sharper image.
    - **Exposure**: Looks at the 8-bit histogram. Applies large penalties for pixels hitting 255 (blown highlights) or 0 (pure black shadows).
+   - *Note: For non-RAW fallback files (like HEIF/JPG), the direct image data is used instead of a RAW thumbnail extraction.*
 5. **Rating**: Combines the normalized scores and picks the top photo per burst. Uses the bundled ExifTool Perl engine to call `exiftool -XMP:Rating=X` and overwrites the metadata in place.
 
 ## Development

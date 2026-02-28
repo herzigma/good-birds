@@ -1,5 +1,6 @@
 import argparse
 import sys
+import logging
 from pathlib import Path
 
 import click
@@ -58,6 +59,8 @@ def normalize_scores(burst_photos: list[ScoredPhoto]) -> None:
 @click.option('--rating-rest', default=1, help='Star rating for non-best photos')
 @click.option('--dry-run', is_flag=True, help='Show results without writing ratings')
 @click.option('--verbose', is_flag=True, help='Show detailed scoring info')
+@click.option('--log', is_flag=True, help='Enable writing debug logs to good_birds.log in the target directory')
+@click.option('--exclude-non-raw', is_flag=True, help='Only scan and score RAW files, skipping JPG, HEIF, WEBP.')
 def main(
     directory: Path,
     burst_threshold: float,
@@ -67,11 +70,30 @@ def main(
     rating_best: int,
     rating_rest: int,
     dry_run: bool,
-    verbose: bool
+    verbose: bool,
+    log: bool,
+    exclude_non_raw: bool
 ):
     """Good Birds - Sort and rate bird photography RAW bursts."""
     
+    # Configure logging to go to a file in the target directory
+    handlers = []
+    if log:
+        log_file = directory / "good_birds.log"
+        handlers.append(logging.FileHandler(log_file, mode='w', encoding='utf-8'))
+        
+    logging.basicConfig(
+        level=logging.DEBUG if verbose else logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=handlers
+    )
+    logger = logging.getLogger(__name__)
+    logger.info(f"--- Starting good-birds CLI ---")
+    logger.info(f"Target directory: {directory}")
+    logger.info(f"Arguments: burst_threshold={burst_threshold}, sharpness_weight={sharpness_weight}, exposure_weight={exposure_weight}, center_weight={center_weight}, dry_run={dry_run}")
+    
     if not dry_run and not is_exiftool_installed():
+        logger.error("exiftool is not installed or not in PATH.")
         console.print("[bold red]Error:[/] exiftool is not installed or not in PATH.")
         console.print("Please install exiftool to write ratings, or use --dry-run.")
         sys.exit(1)
@@ -79,8 +101,8 @@ def main(
     console.print(f"[bold cyan]Scanning directory:[/] {directory}")
     
     # 1. Scan directory
-    with console.status("[bold green]Scanning for RAW files..."):
-        photos = scan_directory(directory)
+    with console.status("[bold green]Scanning for RAW & image files..."):
+        photos = scan_directory(directory, exclude_non_raw=exclude_non_raw)
         
     if not photos:
         console.print("[yellow]No supported RAW files found in directory.[/]")
@@ -104,23 +126,34 @@ def main(
         
         for burst in bursts:
             for p in burst.photos:
-                # We need to extract the preview again to score it 
-                # (to avoid holding hundreds of numpy arrays in memory)
                 try:
-                    with rawpy.imread(str(p.info.path)) as raw:
-                        thumb = raw.extract_thumb()
-                        if thumb.format == rawpy.ThumbFormat.JPEG:
-                            import io
-                            preview_img = Image.open(io.BytesIO(thumb.data))
-                            
+                    ext = p.info.path.suffix.lower()
+                    if ext in ('.cr2', '.cr3', '.nef', '.arw', '.raw'):
+                        with rawpy.imread(str(p.info.path)) as raw:
+                            thumb = raw.extract_thumb()
+                            if thumb.format == rawpy.ThumbFormat.JPEG:
+                                import io
+                                preview_img = Image.open(io.BytesIO(thumb.data))
+                                
+                                s_score, e_score, _ = score_photo(
+                                    p.info, 
+                                    preview_img,
+                                    center_weight=center_weight
+                                )
+                                p.sharpness_score = s_score
+                                p.exposure_score = e_score
+                    else:
+                        # Non-raw file, open directly via PIL (handles JPG, WEBP, HEIF)
+                        with Image.open(str(p.info.path)) as img:
                             s_score, e_score, _ = score_photo(
                                 p.info, 
-                                preview_img,
+                                img,
                                 center_weight=center_weight
                             )
                             p.sharpness_score = s_score
                             p.exposure_score = e_score
                 except Exception as e:
+                    logger.error(f"Failed to score {p.info.path.name}: {e}", exc_info=True)
                     if verbose:
                         console.print(f"[yellow]Failed to score {p.info.path.name}: {e}[/]")
                         
@@ -171,9 +204,13 @@ def main(
             for p in burst.photos:
                 rating = rating_best if p is best else rating_rest
                 success = write_rating(p.info.path, rating, dry_run=dry_run)
-                if not success and verbose:
-                    console.print(f"[red]Failed to write to {p.info.path.name}[/]")
+                if not success:
+                    logger.error(f"Failed to write rating to {p.info.path.name}")
+                    if verbose:
+                        console.print(f"[red]Failed to write to {p.info.path.name}[/]")
                 progress.advance(write_task)
+
+    logger.info("Scoring and rating completed.")
 
     console.print(table)
     
