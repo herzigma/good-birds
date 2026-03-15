@@ -8,7 +8,7 @@ A blazing fast command-line tool to help bird photographers sort through bursts 
 - **Smart Burst Detection**: Automatically groups photos taken within 1 second of each other.
 - **Sharpness Analytics**: Uses OpenCV Laplacian Variance to detect which photo is actually in focus.
 - **Exposure Detection**: Analyzes histograms to severely penalize clipped highlights (blown whites) and crushed shadows.
-- **Automatic Rating**: Writes standard XMP star ratings direct to your CR2 files so they show up beautifully in Lightroom, Adobe Bridge, and other EXIF-aware software.
+- **Automatic Rating**: Writes standard XMP star ratings directly to your files **and** generates XMP sidecar files (`.xmp`) for maximum compatibility with Lightroom, Adobe Bridge, Darktable, RawTherapee, RapidRaw, and other photo management software.
 - **Standalone Binary**: Zero dependencies required if you download the Windows executable! ExifTool is bundled automatically inside the app.
 - **Native Image Support**: Optionally process JPEGs, HEIFs, and WebP files alongside your RAW bursts natively, seamlessly avoiding duplicates.
 
@@ -33,6 +33,8 @@ Good Birds modifies the **metadata** of your original RAW files directly without
 ### What changes are made to the image files?
 
 The tool uses the industry-standard ExifTool engine to write standard **XMP Star Ratings** (`XMP:Rating`) into the metadata headers of your RAW/CR2 files.
+It also generates an **XMP sidecar file** (e.g., `IMG_1234.CR2.xmp`) next to each image, which is required by applications like Darktable, RawTherapee, and RapidRaw that read ratings from sidecar files rather than embedded metadata.
+
 By default:
 
 - The single "best" photo in each burst receives a **5-star** rating.
@@ -40,10 +42,10 @@ By default:
 
 ### Using ratings in your photo editing software
 
-Because Good Birds writes standard XMP ratings, these stars are instantly recognized by almost all professional photo management software:
+Because Good Birds writes both embedded XMP ratings and sidecar files, stars are recognized by virtually all professional photo management software:
 
 1. Run `good-birds` on your folder of RAW files.
-2. Open that same folder in your editing software (e.g., **Adobe Lightroom Classic**, **Adobe Bridge**, **Capture One**, or **Darktable**).
+2. Open that same folder in your editing software (e.g., **Adobe Lightroom Classic**, **Adobe Bridge**, **Capture One**, **Darktable**, **RawTherapee**, or **RapidRaw**).
 3. The star ratings will automatically appear under your photo thumbnails.
 4. **Filter your view** to show only 5-star photos! You can now instantly review the best, sharpest shots from every burst, and mass-delete the 1-star blurry duplicates if desired.
 
@@ -77,6 +79,7 @@ good-birds /path/to/your/photos --exclude-non-raw
 | `--verbose` | `False` | Print detailed scoring data for the best photo of every burst in the final table. |
 | `--log` | `False` | Write detailed debug traces and errors into a local `good_birds.log` file in the scanned directory. |
 | `--exclude-non-raw` | `False` | Only process explicit RAW files. Skip attempting to score JPEGs, HEIFs, or WebP files natively. |
+| `--sidecar/--no-sidecar` | `True` | Write XMP sidecar files (`.xmp`) alongside images for Darktable, RawTherapee, and RapidRaw compatibility. Use `--no-sidecar` to disable. |
 
 ## How it works
 

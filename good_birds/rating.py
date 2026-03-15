@@ -2,6 +2,7 @@ import os
 import sys
 import subprocess
 import shutil
+import textwrap
 from pathlib import Path
 
 # Windows Explorer uses a specific mapping between 1-5 stars and percent values.
@@ -46,14 +47,51 @@ def is_exiftool_installed() -> bool:
     """Check if exiftool is available on the system PATH or bundled."""
     return get_exiftool_cmd() is not None
 
-def write_rating(file_path: Path, rating: int, dry_run: bool = False) -> bool:
+def write_xmp_sidecar(file_path: Path, rating: int) -> bool:
     """
-    Write star rating metadata to a file using exiftool.
+    Write a minimal XMP sidecar file alongside the image.
     
-    Sets three tags for maximum compatibility:
+    Creates a file named <original_filename>.xmp (e.g. IMG_1234.CR2.xmp)
+    containing a standards-compliant XMP packet with xmp:Rating.
+    This is required for Darktable, RawTherapee, and RapidRaw to display
+    star ratings, as they read from sidecar files rather than embedded metadata.
+    
+    Returns True if successful, False otherwise.
+    """
+    sidecar_path = file_path.parent / f"{file_path.name}.xmp"
+    
+    xmp_content = textwrap.dedent(f"""\
+        <?xpacket begin='\ufeff' id='W5M0MpCehiHzreSzNTczkc9d'?>
+        <x:xmpmeta xmlns:x="adobe:ns:meta/">
+         <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+          <rdf:Description rdf:about=""
+           xmlns:xmp="http://ns.adobe.com/xap/1.0/"
+           xmp:Rating="{rating}"/>
+         </rdf:RDF>
+        </x:xmpmeta>
+        <?xpacket end='w'?>
+    """)
+    
+    try:
+        sidecar_path.write_text(xmp_content, encoding="utf-8")
+        return True
+    except Exception as e:
+        print(f"Error writing sidecar for {file_path.name}: {e}")
+        return False
+
+
+def write_rating(file_path: Path, rating: int, dry_run: bool = False, sidecar: bool = True) -> bool:
+    """
+    Write star rating metadata to a file using exiftool and an XMP sidecar.
+    
+    Sets three embedded tags for maximum compatibility:
       - XMP:Rating        (standard, read by Lightroom/DigiKam/etc.)
       - XMP:RatingPercent (Microsoft-specific, needed for Windows Explorer stars)
       - Rating            (EXIF-level fallback)
+    
+    Optionally writes an XMP sidecar file (<filename>.xmp) for applications that
+    read ratings from sidecar files (Darktable, RawTherapee, RapidRaw).
+    Sidecar generation is controlled by the `sidecar` parameter (default: True).
     
     Returns True if successful, False otherwise.
     """
@@ -88,6 +126,11 @@ def write_rating(file_path: Path, rating: int, dry_run: bool = False) -> bool:
             text=True,
             check=True
         )
+        
+        # Also write an XMP sidecar for Darktable/RawTherapee/RapidRaw
+        if sidecar:
+            write_xmp_sidecar(file_path, rating)
+        
         return True
         
     except subprocess.CalledProcessError as e:
