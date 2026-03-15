@@ -1,4 +1,4 @@
-![alt text](image.png)# Good Birds 🦅 📸
+# Good Birds 🦅 📸
 
 A blazing fast command-line tool to help bird photographers sort through bursts of RAW photos and automatically pick the sharpest, best-exposed shots.
 
