@@ -79,8 +79,34 @@ def write_xmp_sidecar(file_path: Path, rating: int) -> bool:
         print(f"Error writing sidecar for {file_path.name}: {e}")
         return False
 
+def write_rrdata_sidecar(file_path: Path, rating: int) -> bool:
+    """
+    Write a minimal rrdata sidecar file alongside the image.
 
-def write_rating(file_path: Path, rating: int, dry_run: bool = False, sidecar: bool = True) -> bool:
+    Creates a file named <original_filename>.xmp (e.g. IMG_1234.CR2.rrdata)
+    containing the minimum JSON data required by RapidRAW to display
+    star ratings, as it reads from sidecar files rather than embedded metadata.
+
+    Returns True if successful, False otherwise.
+    """
+    sidecar_path = file_path.parent / f"{file_path.name}.rrdata"
+    json_content = textwrap.dedent(f"""\
+        {{
+            "version": 1,
+            "rating": {rating},
+            "adjustments": {{}},
+            "tags": null
+        }}
+    """)
+
+    try:
+        sidecar_path.write_text(json_content, encoding="utf-8")
+        return True
+    except Exception as e:
+        print(f"Error writing rrdata sidecar for {file_path.name}: {e}")
+        return False
+
+def write_rating(file_path: Path, rating: int, dry_run: bool = False, sidecar: bool = True, rr_sidecar: bool = False, write_exif: bool = True) -> bool:
     """
     Write star rating metadata to a file using exiftool and an XMP sidecar.
     
@@ -92,6 +118,12 @@ def write_rating(file_path: Path, rating: int, dry_run: bool = False, sidecar: b
     Optionally writes an XMP sidecar file (<filename>.xmp) for applications that
     read ratings from sidecar files (Darktable, RawTherapee, RapidRaw).
     Sidecar generation is controlled by the `sidecar` parameter (default: True).
+
+    Optionally writes an rrdata sidecar file (<filename>.rrdata) for RapidRaw.
+    Sidecar generation is controlled by the `rr_sidecar` parameter (default: False).
+
+    Optionally skip writing EXIF data to the image.
+    Skipping writing EXIF data is controlled by the `write_exif` parameter (default: True).
     
     Returns True if successful, False otherwise.
     """
@@ -107,29 +139,36 @@ def write_rating(file_path: Path, rating: int, dry_run: bool = False, sidecar: b
     rating_percent = RATING_TO_PERCENT.get(rating, 0)
         
     try:
-        # Construct exact command array.
-        # -overwrite_original prevents creating a _original backup file
-        # Three tags for full compatibility with Windows, DigiKam, Lightroom, etc.
-        cmd = exiftool_cmd + [
-            "-overwrite_original", 
-            f"-XMP:Rating={rating}",
-            f"-XMP:RatingPercent={rating_percent}",
-            f"-Rating={rating}",
-            str(file_path)
-        ]
-        
-        # Run silently unless there's an error
-        result = subprocess.run(
-            cmd, 
-            stdout=subprocess.PIPE, 
-            stderr=subprocess.PIPE,
-            text=True,
-            check=True
-        )
+        if write_exif:
+            # Construct exact command array.
+            # -overwrite_original prevents creating a _original backup file
+            # Three tags for full compatibility with Windows, DigiKam, Lightroom, etc.
+            cmd = exiftool_cmd + [
+                "-overwrite_original", 
+                f"-XMP:Rating={rating}",
+                f"-XMP:RatingPercent={rating_percent}",
+                f"-Rating={rating}",
+                str(file_path)
+            ]
+            
+            # Run silently unless there's an error
+            result = subprocess.run(
+                cmd, 
+                stdout=subprocess.PIPE, 
+                stderr=subprocess.PIPE,
+                text=True,
+                check=True
+            )
         
         # Also write an XMP sidecar for Darktable/RawTherapee/RapidRaw
         if sidecar:
             write_xmp_sidecar(file_path, rating)
+
+        # Also write an rrdata sidecar for RapidRaw
+        # Only write the five star rating sidecars, since RapidRaw will ignore
+        # unrated files when filtering for ratings
+        if rr_sidecar and rating == 5:
+            write_rrdata_sidecar(file_path, rating)
         
         return True
         

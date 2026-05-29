@@ -1,9 +1,10 @@
+import json
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 import pytest
 
-from good_birds.rating import write_rating, write_xmp_sidecar, is_exiftool_installed
+from good_birds.rating import write_rating, write_xmp_sidecar, write_rrdata_sidecar, is_exiftool_installed
 
 def test_dry_run(capsys, tmp_path):
     dummy = tmp_path / "dummy.CR2"
@@ -51,6 +52,10 @@ def test_write_rating_success(mock_run, mock_get_cmd, tmp_path):
     content = sidecar.read_text(encoding="utf-8")
     assert 'xmp:Rating="3"' in content
 
+    # Verify rr_sidecar was not created
+    rr_sidecar = tmp_path / "dummy.CR2.rrdata"
+    assert not rr_sidecar.exists()
+
 @patch("good_birds.rating.get_exiftool_cmd", return_value=["exiftool"])
 @patch("good_birds.rating.subprocess.run")
 def test_write_rating_failure(mock_run, mock_get_cmd):
@@ -78,6 +83,49 @@ def test_write_rating_no_sidecar(mock_run, mock_get_cmd, tmp_path):
     sidecar = tmp_path / "test.CR2.xmp"
     assert not sidecar.exists()
 
+    # Verify rr_sidecar was not created
+    rr_sidecar = tmp_path / "test.CR2.rrdata"
+    assert not rr_sidecar.exists()
+
+@patch("good_birds.rating.get_exiftool_cmd", return_value=["exiftool"])
+@patch("good_birds.rating.subprocess.run")
+def test_write_ratings_rr_sidecar(mock_run, mock_get_cmd, tmp_path):
+    mock_run.return_value = MagicMock(returncode=0)
+    
+    dummy = tmp_path / "test.CR2"
+    dummy.touch()
+    result = write_rating(dummy, 5, rr_sidecar=True)
+    
+    assert result is True
+    mock_run.assert_called_once()
+    
+    # Verify sidecar was also created
+    sidecar = tmp_path / "test.CR2.xmp"
+    assert sidecar.exists()
+
+    # Verify rr_sidecar was created
+    rr_sidecar = tmp_path / "test.CR2.rrdata"
+    assert rr_sidecar.exists()
+
+@patch("good_birds.rating.get_exiftool_cmd", return_value=["exiftool"])
+@patch("good_birds.rating.subprocess.run")
+def test_write_ratings_rr_sidecar_low_rating(mock_run, mock_get_cmd, tmp_path):
+    mock_run.return_value = MagicMock(returncode=0)
+    
+    dummy = tmp_path / "test.CR2"
+    dummy.touch()
+    result = write_rating(dummy, 3, rr_sidecar=True)  # rating != 5
+    
+    assert result is True
+    mock_run.assert_called_once()
+    
+    # Verify sidecar was also created
+    sidecar = tmp_path / "test.CR2.xmp"
+    assert sidecar.exists()
+
+    # Verify rr_sidecar was not created
+    rr_sidecar = tmp_path / "test.CR2.rrdata"
+    assert not rr_sidecar.exists()
 
 # --- XMP Sidecar Tests ---
 
@@ -123,6 +171,93 @@ def test_write_xmp_sidecar_overwrites(tmp_path):
     assert 'xmp:Rating="5"' in content2
     assert 'xmp:Rating="1"' not in content2
     
+# --- rrdata Sidecar Tests ---
+
+def test_write_rrdata_sidecar_creates_file(tmp_path):
+    """Test that write_rrdata_sidecar creates a correctly named .rrdata file."""
+    dummy = tmp_path / "IMG_1234.CR2"
+    dummy.touch()
+    
+    result = write_rrdata_sidecar(dummy, 5)
+    
+    assert result is True
+    sidecar = tmp_path / "IMG_1234.CR2.rrdata"
+    assert sidecar.exists()
+
+def test_write_rrdata_sidecar_content(tmp_path):
+    """Test that the sidecar file contains valid rrdata with the correct rating."""
+    dummy = tmp_path / "photo.ARW"
+    dummy.touch()
+    
+    write_rrdata_sidecar(dummy, 3)
+    
+    sidecar = tmp_path / "photo.ARW.rrdata"
+    content = sidecar.read_text(encoding="utf-8")
+    
+    # Check for required rrdata structure
+    rrdata = json.loads(content)
+    assert rrdata["version"] == 1
+    assert rrdata["rating"] == 3
+    assert isinstance(rrdata["adjustments"], dict)
+    assert rrdata["tags"] is None
+
+def test_write_rrdata_sidecar_overwrites(tmp_path):
+    """Test that writing a sidecar again updates the rating."""
+    dummy = tmp_path / "test.CR2"
+    dummy.touch()
+    
+    write_rrdata_sidecar(dummy, 1)
+    content1 = (tmp_path / "test.CR2.rrdata").read_text(encoding="utf-8")
+    rrdata1 = json.loads(content1)
+    assert rrdata1["rating"] == 1
+    
+    write_rrdata_sidecar(dummy, 5)
+    content2 = (tmp_path / "test.CR2.rrdata").read_text(encoding="utf-8")
+    rrdata2 = json.loads(content2)
+    assert rrdata2["rating"] == 5
+    
+# --- Skip writing EXIF data to image Tests ---
+
+@patch("good_birds.rating.get_exiftool_cmd", return_value=["exiftool"])
+@patch("good_birds.rating.subprocess.run")
+def test_write_no_exif(mock_run, mock_get_cmd, tmp_path):
+    mock_run.return_value = MagicMock(returncode=0)
+    
+    dummy = tmp_path / "test.CR2"
+    dummy.touch()
+    result = write_rating(dummy, 5, write_exif=False)
+    
+    assert result is True
+    mock_run.assert_not_called()
+    
+    # Verify sidecar was also created
+    sidecar = tmp_path / "test.CR2.xmp"
+    assert sidecar.exists()
+
+    # Verify rr_sidecar was not created
+    rr_sidecar = tmp_path / "test.CR2.rrdata"
+    assert not rr_sidecar.exists()
+
+@patch("good_birds.rating.get_exiftool_cmd", return_value=["exiftool"])
+@patch("good_birds.rating.subprocess.run")
+def test_write_no_exif(mock_run, mock_get_cmd, tmp_path):
+    mock_run.return_value = MagicMock(returncode=0)
+    
+    dummy = tmp_path / "test.CR2"
+    dummy.touch()
+    result = write_rating(dummy, 5, sidecar=False, rr_sidecar=True, write_exif=False)
+    
+    assert result is True
+    mock_run.assert_not_called()
+    
+    # Verify sidecar was also created
+    sidecar = tmp_path / "test.CR2.xmp"
+    assert not sidecar.exists()
+
+    # Verify rr_sidecar was not created
+    rr_sidecar = tmp_path / "test.CR2.rrdata"
+    assert rr_sidecar.exists()
+
 @pytest.mark.integration
 def test_real_exiftool():
     """

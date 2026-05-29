@@ -19,7 +19,7 @@ from .rating import get_exiftool_cmd
 logger = logging.getLogger(__name__)
 
 # Standard RAW formats we support
-RAW_EXTENSIONS = ('.cr2', '.cr3', '.nef', '.arw', '.raw')
+RAW_EXTENSIONS = ('.cr2', '.cr3', '.nef', '.arw', '.raw', '.orf')
 # Standard non-RAW image formats we support mapping metadata for natively
 NON_RAW_EXTENSIONS = ('.jpg', '.jpeg', '.heif', '.heic', '.webp')
 
